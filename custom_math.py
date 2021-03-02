@@ -6,10 +6,12 @@ from scipy.ndimage import gaussian_filter1d
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import curve_fit
 from helper_functions import fit_params
+import scipy.cluster.hierarchy as sch
 
 #logging functions
 import log_functions as lg
 
+import pandas as pd
 
 def gauss_peak(x, Amp, sigma, cen):
     return Amp*np.exp(-((x-cen)**2)*0.5/sigma**2)
@@ -107,4 +109,47 @@ def curve_normalize(data):
         result.append(i/max(abs(data)))
         
     return result
+
+def cluster_distance(data, f_threshold=0.5):
     
+    """
+    Rearranges the distance/similarity matrix, corr_array, so that groups of low distance/ 
+    high similarty are next to eachother 
+    
+    Parameters
+    ----------
+    data : pandas.DataFrame or numpy.ndarray
+        a NxN distance or similarty matrix 
+        
+    Returns
+    -------
+    pandas.DataFrame or numpy.ndarray
+        a NxN distance or similarty matrix with the columns and rows rearranged
+    """
+    
+    pairwise_distances = sch.distance.pdist(data)
+
+    linkage = sch.linkage(pairwise_distances, method='complete')
+    
+    cluster_distance_threshold = pairwise_distances.max()*f_threshold
+    
+    idx_to_cluster_array = sch.fcluster(linkage, cluster_distance_threshold, 
+                                        criterion='distance')  
+    
+    
+    group_df = pd.DataFrame({'group':idx_to_cluster_array,'words':data.columns.values})
+    group_keys = list(set(idx_to_cluster_array))
+    
+    groups = []
+    
+    for key in group_keys:
+        groups.append(group_df[group_df['group'].isin([key])]['words'].tolist())
+        
+    
+    
+    idx = np.argsort(idx_to_cluster_array)
+    
+    if isinstance(data, pd.DataFrame):
+        return data.iloc[idx, :].T.iloc[idx, :], groups
+    
+    return data[idx, :][:, idx], idx, idx_to_cluster_array
